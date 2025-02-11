@@ -1,0 +1,418 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   fdf.c                                              :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: reerikai <reerikai@student.hive.fi>        +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/02/01 19:23:34 by reerikai          #+#    #+#             */
+/*   Updated: 2025/02/11 14:43:55 by reerikai         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+/*FIX THE INT ARRAY FREEING AND TEST THAT YOU CAN INPUT THE DATA TO THE STRUCT*/
+
+static void ft_hook(void* param);
+static void ft_error(void);
+
+#include "fdf.h"
+
+int	main(int argc, char **argv)
+{
+	t_fdf	*fdf;
+
+	if (!arg_validation(argc, argv))
+		exit (1);
+	fdf = (t_fdf *)malloc(sizeof(t_fdf));
+	read_map(fdf, argv[1]);
+	init_fdf(fdf);
+	draw(fdf);
+	ft_printf("Height: %d\n", fdf->height);
+	ft_printf("Width: %d\n", fdf->width);
+	ft_printf("SUCCESS\n");
+	mlx_loop_hook(fdf->mlx, ft_hook, fdf->mlx);
+	mlx_loop(fdf->mlx);
+	mlx_terminate(fdf->mlx);
+	ft_free_int_array(fdf);
+	free(fdf);
+	return (0);
+}
+
+static void ft_hook(void* param)
+{
+	const mlx_t* mlx = param;
+
+	printf("WIDTH: %d | HEIGHT: %d\n", mlx->width, mlx->height);
+}
+
+static void ft_error(void)
+{
+	fprintf(stderr, "%s", mlx_strerror(mlx_errno));
+	exit(EXIT_FAILURE);
+}
+
+void	init_fdf(t_fdf *fdf)
+{
+	fdf->mlx = mlx_init(WIN_W, WIN_H, "fdf", true);
+	if (!fdf->mlx)
+		ft_error();
+	fdf->img = mlx_new_image(fdf->mlx, WIN_W, WIN_H);
+	mlx_image_to_window(fdf->mlx, fdf->img, 1, 1);
+	fdf->scale_x = WIN_W / (2 * fdf->width);
+	fdf->scale_y = WIN_H / (2 * fdf->height);
+	fdf->offset_x = WIN_W / 2.5;
+	fdf->offset_y = WIN_H / 2.5;
+	if (fdf->scale_x < fdf->scale_y)
+		fdf->scale = fdf->scale_x;
+	else
+		fdf->scale = fdf->scale_y;
+	fdf->points.x = 0;
+	fdf->points.y = 0;
+	fdf->points.z = 0;
+	fdf->points.color = 0;
+}
+
+bool	arg_validation(int argc, char **argv)
+{
+	if (argc != 2)
+	{
+		ft_putstr_fd("Invalid number of arguments", 2);
+		return (false);
+	}
+	if (!valid_file(argv[1]))
+	{
+		ft_putstr_fd("Invalid file", 2);
+		return (false);
+	}
+	return (true);
+}
+
+bool	valid_file(char *file)
+{
+	int		len;
+	char	*end;
+
+	len = ft_strlen(file);
+	end = ft_substr(file, len - 4, 4);
+	if (ft_strncmp(end, ".fdf", 4) != 0)
+		return (false);
+	free(end);
+	return (true);
+}
+
+void	read_map(t_fdf *fdf, char *file)
+{
+	get_height_and_width(fdf, file);
+	init_array_mem(fdf);
+	init_array_data(fdf, file);
+}
+
+void	init_array_mem(t_fdf *fdf)
+{
+	int	i;
+
+	fdf->z_array = (int**)malloc(sizeof(int*) * (fdf->height + 1));
+	if (!fdf->z_array)
+		exit(1); // Add frees and proper exit
+	i = 0;
+	while (i < fdf->height)
+	{
+		fdf->z_array[i] = (int*)malloc(sizeof(int) * (fdf->width + 1));
+		if (!fdf->z_array[i])
+			exit(1); // Add frees and proper exit
+		i++;
+	}
+}
+
+void	get_height_and_width(t_fdf *fdf, char *file)
+{
+	int		count;
+	int		fd;
+	char	*line;
+
+	fd = open(file, O_RDONLY);
+	if (fd == -1)
+		exit (1); // Add frees and proper exit
+	count = 0;
+	while (1)
+	{
+		line = get_next_line(fd);
+		if (!line)
+			break ;
+		if (count == 0)
+			fdf->width = get_width(fdf, line);
+		free(line);
+		count++;
+	}
+	fdf->height = count;
+	close (fd);
+}
+
+int	get_width(t_fdf *fdf, char *line)
+{
+	int		count;
+	char	**array;
+
+	array = ft_split(line, ' ');
+	if (!array)
+	{
+		free(fdf);
+		exit (1);
+	}
+	count = 0;
+	while (array[count])
+		count++;
+	ft_free_array(array);
+	return (count);
+}
+
+void	init_array_data(t_fdf *fdf, char *file)
+{
+	char	*line;
+	int		fd;
+	int		row;
+
+	fd = open(file, O_RDONLY);
+	if (fd == -1)
+		exit(1); // Add frees and proper exit
+	row = 0;
+	while (1)
+	{
+		line = get_next_line(fd);
+		if (!line)
+		{
+			free(line);
+			break ;
+		}
+		insert_data(fdf, line, row);
+		free(line);
+		row++;
+	}
+	close (fd);
+}
+
+void	insert_data(t_fdf *fdf, char *line, int row)
+{
+	char	**array;
+	int		i;
+
+	array = ft_split(line, ' ');
+	if (!array)
+		exit(1); // Add frees and proper exit
+	i = 0;
+	while (array[i] && i < fdf->width)
+	{
+		fdf->z_array[row][i] = ft_atoi(array[i]);
+		ft_printf("%d ", fdf->z_array[row][i]);
+		i++;
+	}
+	ft_printf("\n");
+	ft_free_array(array);
+}
+
+void	ft_free_array(char **array)
+{
+	int	i;
+
+	i = 0;
+	if (!array)
+		return ;
+	while (array[i] != NULL)
+	{
+		free(array[i]);
+		i++;
+	}
+	free(array);
+}
+
+void	ft_free_int_array(t_fdf *fdf)
+{
+	int	i;
+
+	i = 0;
+	if (!fdf->z_array)
+		return ;
+	while (i < fdf->height)
+	{
+		free(fdf->z_array[i]);
+		fdf->z_array[i] = NULL;
+		i++;
+	}
+	free(fdf->z_array);
+}
+
+void	draw_line(int x0, int y0, int x1, int y1, t_fdf *fdf)
+{
+	float	delta_x;
+	float	delta_y;
+	int		max;
+	int		z0;
+	int		z1;
+
+	z0 = fdf->z_array[y0][x0];
+	z1 = fdf->z_array[y1][x1];
+
+	x0 = x0 * 6;
+	x1 = x1 * 6;
+	y0 = y0 * 6;
+	y1 = y1 * 6;
+	z0 = z0 * 1.5;
+	z1 = z1 * 1.5;
+
+	calc_isometric(&x0, &y0, z0);
+	calc_isometric(&x1, &y1, z1);
+
+	x0 += WIN_W / 2.5;
+	x1 += WIN_W / 2.5;
+	y0 += WIN_H / 2.5;
+	y1 += WIN_H / 2.5;
+
+	fdf->points.color = (z0) ? 0xe80c0cff : 0xffffffff;
+
+	delta_x = x1 - x0;
+	delta_y = y1 - y0;
+
+	if (delta_x > delta_y)
+		max = delta_x;
+	else
+		max = delta_y;
+	delta_x = delta_x / max;
+	delta_y = delta_y / max;
+	// x0 = x0 + fdf->offset_x;
+	// y0 = y0 + fdf->offset_y;
+	while ((int)(x0 - x1) || (int)(y0 - y1))
+	{
+		mlx_put_pixel(fdf->img, x0, y0, fdf->points.color);
+		x0 = x0 + delta_x;
+		y0 = y0 + delta_y;
+	}
+}
+
+void	calc_isometric(int *x, int *y, int z)
+{
+	int			new_x;
+	int			new_y;
+	float		a;
+
+	a = 0.523599;
+	new_x = ((*x - *y) * cos(a));
+	new_y = ((*x + *y) * sin(a) - z);
+	*x = new_x;
+	*y = new_y;
+}
+
+
+void	calc_points(t_fdf *fdf, int x, int y, int z)
+{
+	float		a;
+
+	a = 0.523599;
+	fdf->points.x = ((x - y) * cos(a)) * fdf->scale;
+	fdf->points.y = ((x + y) * sin(a) - z) * fdf->scale;
+	fdf->points.z = z;
+
+	//points.x = (x * cos(a) + y * cos(a + 2) + z * cos(a - 2) * fdf->scale / 2);
+	//points.y = (x * sin(a) + y * sin(a + 2) + z * sin(a - 2) * fdf->scale / 2);
+	//points.z = z;
+
+}
+
+void	draw(t_fdf *fdf)
+{
+	int			x;
+	int			y;
+
+	t_points	p1;
+	t_points	p2;
+
+	y = 0;
+	while (y < fdf->height)
+	{
+		x = 0;
+		while (x < fdf->width)
+		{
+			calc_points(fdf, x, y, fdf->z_array[y][x]);
+			p1 = fdf->points;
+			if (x < fdf->width - 1)
+			{
+				calc_points(fdf, x + 1, y, fdf->z_array[y][x + 1]);
+				p2 = fdf->points;
+				draw_line(p1.x, p1.y, p2.x, p2.y, fdf);
+			}
+			if (y < fdf->height - 1)
+			{
+				calc_points(fdf, x, y + 1, fdf->z_array[y + 1][x]);
+				p2 = fdf->points;
+				draw_line(p1.x, p1.y, p2.x, p2.y, fdf);
+			}
+			x++;
+		}
+		y++;
+	}
+}
+
+// void	draw(t_fdf *fdf)
+// {
+// 	int			x;
+// 	int			y;
+// 	int			z;
+// 	int			img_x;
+// 	int			img_y;
+
+// 	y = 0;
+// 	while (y < fdf->height)
+// 	{
+// 		x = 0;
+// 		while (x < fdf->width)
+// 		{
+// 			// if (x < fdf->width - 1)
+// 			// 	draw_line(x, y, x + 1, y, fdf);
+// 			// if (y < fdf->height - 1)
+// 			// 	draw_line(x, y, x, y + 1, fdf);
+// 			z = fdf->z_array[y][x];
+// 			calc_points(fdf, x, y, z);
+// 			img_x = fdf->points.x + fdf->offset_x;
+// 			img_y = fdf->points.y + fdf->offset_y;
+// 			ft_printf("Plotting: (%d, %d) -> (%d, %d)\n", x, y, img_x, img_y);
+// 			mlx_put_pixel(fdf->img, img_x, img_y, WHITE);
+// 			x++;
+// 		}
+// 		y++;
+// 	}
+// }
+
+void	init_points(t_fdf *fdf, int x, int y)
+{
+	fdf->points.x = x;
+	fdf->points.y = y;
+	fdf->points.z = fdf->z_array[y][x];
+}
+
+
+// void	draw_hor_line(t_fdf *fdf)
+// {
+// 	float	delta_x;
+// 	float	delta_y;
+// 	int		max;
+
+// 	//calc_isometric(&x0, &y0, z0);
+// 	//calc_isometric(&x1, &y1, z1);
+
+// 	delta_x = x1 - x0;
+// 	delta_y = y1 - y0;
+
+// 	if (delta_x > delta_y)
+// 		max = delta_x;
+// 	else
+// 		max = delta_y;
+// 	delta_x = delta_x / max;
+// 	delta_y = delta_y / max;
+// 	// x0 = x0 + fdf->offset_x;
+// 	// y0 = y0 + fdf->offset_y;
+// 	while ((int)(x0 - x1) || (int)(y0 - y1))
+// 	{
+// 		mlx_put_pixel(fdf->img, x0, y0, fdf->points.color);
+// 		x0 = x0 + delta_x;
+// 		y0 = y0 + delta_y;
+// 	}
+// }
