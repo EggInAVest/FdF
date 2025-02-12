@@ -1,0 +1,330 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   fdf.c                                              :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: reerikai <reerikai@student.hive.fi>        +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/02/01 19:23:34 by reerikai          #+#    #+#             */
+/*   Updated: 2025/02/12 16:01:04 by reerikai         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+static void ft_hook(void* param);
+static void ft_error(void);
+
+#include "fdf.h"
+
+int	main(int argc, char **argv)
+{
+	t_fdf	*fdf;
+
+	if (!arg_validation(argc, argv))
+	 	exit(1);
+	fdf = (t_fdf *)malloc(sizeof(t_fdf));
+	read_map(fdf, argv[1]);
+	init_fdf(fdf);
+	draw(fdf);
+	mlx_loop_hook(fdf->mlx, ft_hook, fdf->mlx);
+	mlx_loop(fdf->mlx);
+	mlx_terminate(fdf->mlx);
+	ft_free_int_array(fdf);
+	free(fdf);
+	return (0);
+}
+
+void	read_map(t_fdf *fdf, char *file_name)
+{
+	fdf->height = get_height(file_name);
+	fdf->width = get_leveys(file_name);
+	ft_printf("HEIGHT: %d\n", fdf->height);
+	ft_printf("WIDTH: %d\n", fdf->width);
+	init_memory(fdf);
+	init_data(fdf, file_name);
+}
+
+int	get_height(char *file_name)
+{
+	int		height;
+	int		fd;
+	char	*line;
+
+	fd = open(file_name, O_RDONLY);
+	if (fd == -1)
+		exit (1);
+	height = 0;
+	while (1)
+	{
+		line = get_next_line(fd);
+		if (!line)
+			break ;
+		height++;
+		free(line);
+	}
+	close(fd);
+	return (height);
+}
+
+int	get_leveys(char *file_name)
+{
+	int		width;
+	int		fd;
+	char	**array;
+	char	*line;
+
+	fd = open(file_name, O_RDONLY);
+	if (fd == -1)
+		exit (1);
+	line = get_next_line(fd);
+	array = ft_split(line, ' ');
+	free(line);
+	width = 0;
+	while (array[width])
+		width++;
+	close (fd);
+	ft_free_array(array);
+	return (width);
+}
+
+void	init_memory(t_fdf *fdf)
+{
+	int	i;
+
+	fdf->z_array = (int**)malloc(sizeof(int*) * (fdf->height + 1));
+	if (!fdf->z_array)
+		exit (1);
+	i = 0;
+	while (i < fdf->height)
+	{
+		fdf->z_array[i] = (int*)malloc(sizeof(int) * (fdf->width + 1));
+		if (!fdf->z_array[i])
+			exit (1); // Add frees etc.
+		i++;
+	}
+}
+
+void	init_data(t_fdf *fdf, char *file_name)
+{
+	int		fd;
+	int		i;
+	char	*line;
+
+	fd = open(file_name, O_RDONLY);
+	if (fd == -1)
+		exit (1);
+	i = 0;
+	while (i < fdf->height)
+	{
+		line = get_next_line(fd);
+		if (!line)
+		{
+			free(line);
+			break ;
+		}
+		fill_data(fdf->z_array[i], line, fdf->width);
+		free(line);
+		i++;
+	}
+	//fdf->z_array[i] = NULL;
+	close(fd);
+}
+
+void	fill_data(int *z_array, char *line, int width)
+{
+	char	**numbers;
+	int		i;
+
+	numbers = ft_split(line, ' ');
+	i = 0;
+	while (numbers[i] && i < width)
+	{
+		z_array[i] = ft_atoi(numbers[i]);
+		free(numbers[i]);
+		i++;
+	}
+	free(numbers);
+}
+
+bool	arg_validation(int argc, char **argv)
+{
+	if (argc != 2)
+	{
+		ft_putstr_fd("Invalid number of arguments", 2);
+		return (false);
+	}
+	if (!valid_file(argv[1]))
+	{
+		ft_putstr_fd("Invalid file", 2);
+		return (false);
+	}
+	return (true);
+}
+
+bool	valid_file(char *file)
+{
+	int		len;
+	char	*end;
+
+	len = ft_strlen(file);
+	end = ft_substr(file, len - 4, 4);
+	if (ft_strncmp(end, ".fdf", 4) != 0)
+		return (false);
+	free(end);
+	return (true);
+}
+
+void	ft_free_array(char **array)
+{
+	int	i;
+
+	i = 0;
+	if (!array)
+		return ;
+	while (array[i] != NULL)
+	{
+		free(array[i]);
+		i++;
+	}
+	free(array);
+}
+
+void	ft_free_int_array(t_fdf *fdf)
+{
+	int	i;
+
+	i = 0;
+	if (!fdf->z_array)
+		return ;
+	while (i < fdf->height)
+	{
+		free(fdf->z_array[i]);
+		fdf->z_array[i] = NULL;
+		i++;
+	}
+	free(fdf->z_array);
+}
+
+void	bres_alg(float x, float y, float x1, float y1, t_fdf *fdf)
+{
+	float	delta_x;
+	float	delta_y;
+	int		max;
+	int		z;
+	int		z1;
+
+	z = fdf->z_array[(int)y][(int)x];
+	z1 = fdf->z_array[(int)y1][(int)x1];
+
+	/*-----ZOOM-----*/
+	x = x * 20;
+	y = y * 20;
+	x1 = x1 * 20;
+	y1 = y1 * 20;
+
+	/*-----COLOR-----*/
+	fdf->points.color = (z) ? RED : WHITE;
+
+	delta_x = x1 - x;
+	delta_y = y1 - y;
+
+	transform(&x, &y, z);
+	transform(&x1, &y1, z1);
+
+	/*-----CENTERING-----*/
+	x = x + fdf->offset_x;
+	y = y + fdf->offset_y;
+	x1 = x1 + fdf->offset_x;
+	y1 = y1 + fdf->offset_y;
+
+	max = count_max(delta_x, delta_y);
+	delta_x = delta_x / max;
+	delta_y = delta_y / max;
+
+	while ((int)(x - x1) || (int)(y - y1))
+	{
+		if (x >= 0 && x < WIN_W && y >= 0 && y < WIN_H)
+			mlx_put_pixel(fdf->img, x, y, fdf->points.color);
+		x = x + delta_x;
+		y = y + delta_y;
+		if (y + delta_y == y)
+			y++;
+	}
+}
+
+int	count_max(float delta_x, float delta_y)
+{
+	if (fabsf(delta_x) > fabsf(delta_y))
+		return ((int)fabsf(delta_x));
+	else
+		return ((int)fabsf(delta_y));
+}
+
+void	init_fdf(t_fdf *fdf)
+{
+	fdf->mlx = mlx_init(WIN_W, WIN_H, "fdf", true);
+	if (!fdf->mlx)
+		ft_error();
+	fdf->img = mlx_new_image(fdf->mlx, WIN_W, WIN_H);
+	mlx_image_to_window(fdf->mlx, fdf->img, 1, 1);
+	fdf->scale_x = WIN_W / (2 * fdf->width);
+	fdf->scale_y = WIN_H / (2 * fdf->height);
+	fdf->offset_x = WIN_W / 2.5;
+	fdf->offset_y = WIN_H / 2.5;
+	if (fdf->scale_x < fdf->scale_y)
+		fdf->scale = fdf->scale_x;
+	else
+		fdf->scale = fdf->scale_y;
+	fdf->points.x = 0;
+	fdf->points.y = 0;
+	fdf->points.z = 0;
+	fdf->points.color = 0;
+}
+
+void	draw(t_fdf *fdf)
+{
+	int	x;
+	int	y;
+
+	y = 0;
+	while (y < fdf->height)
+	{
+		printf("Y: %d\n", y);
+		x = 0;
+		while (x < fdf->width)
+		{
+			printf("X: %d\n", x);
+			if (x < fdf->width -1)
+				bres_alg(x, y, x + 1, y, fdf);
+			if (y < fdf->height -1)
+				bres_alg(x, y, x, y + 1, fdf);
+			x++;
+		}
+		y++;
+	}
+}
+
+void	transform(float *x, float *y, int z)
+{
+	float			new_x;
+	float			new_y;
+	float			a;
+
+	a = 0.523599;
+	new_x = ((*x - *y) * cos(a));
+	new_y = ((*x + *y) * sin(a) - z);
+	*x = roundf(new_x);
+	*y = roundf(new_y);
+}
+
+static void ft_hook(void* param)
+{
+	const mlx_t* mlx = param;
+
+	printf("WIDTH: %d | HEIGHT: %d\n", mlx->width, mlx->height);
+}
+
+static void ft_error(void)
+{
+	fprintf(stderr, "%s", mlx_strerror(mlx_errno));
+	exit(EXIT_FAILURE);
+}
