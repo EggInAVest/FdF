@@ -1,0 +1,46 @@
+#include "libft.h"
+
+int	ft_atoi_base(char *str, int base)
+{
+	int	result;
+	int	sign;
+	int	value;
+
+	if (base < 2 || base > 16)
+		return (0);
+	while (ft_is_whitespace(*str))
+		str++;
+	sign = 1;
+	if (*str == '-' || *str == '+')
+	{
+		if (*str == '-')
+			sign = -1;
+	}
+	result = 0;
+	while (*str)
+	{
+		value = ft_transform_to_digit(*str);
+		if (value == -1 || value >= base)
+			break ;
+		result = (result * base) + value;
+		str++;
+	}
+	return (result * sign);
+}
+
+int	ft_is_whitespace(char c)
+{
+	return (c == ' ' || c == '\n' || c == '\t'
+			|| c == '\v' || c == '\f' || c == '\r');
+}
+
+int	ft_transform_to_digit(char c)
+{
+	if (c >= 0 && c <= 9)
+		return (c - '0');
+	else if (c >= 'A' && c <= 'F')
+		return (c - 'A' + 10);
+	else if (c >= 'a' && c <= 'f')
+		return (c - 'a' + 10);
+	return (-1);
+}
